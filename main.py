@@ -36,7 +36,7 @@ parser.add_argument('--weight_decay', default=1e-4, type=float,
 #                     help='seed for initializing training. ')
 
 
-# NB_SENSOR_CHANNELS = 12
+
 NB_CLASSES = 11
 
 
