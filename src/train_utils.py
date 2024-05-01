@@ -78,4 +78,5 @@ def eval_time_series_seg(net, criterion, test_loader, device='cuda:0', batch_siz
     # print("Val Loss: {:.4f}...".format(np.mean(val_losses)),
     #       "Val Acc: {:.4f}...".format(accuracy / (len(X_test) // batch_size)),
     #       "F1-Score: {:.4f}...".format(f1score / (len(X_test) // batch_size)))
+
     return GTimu_list, GTlabel_list, predlabel_list

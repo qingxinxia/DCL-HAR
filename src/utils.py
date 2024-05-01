@@ -104,6 +104,7 @@ def prepare_data_openpack(dataset, batch_size, datalen, test_dataset):
 
     return train_loader, test_loader
 
+
 class base_dataset(Dataset):
     def __init__(self, imu, label):
         self.imu = torch.from_numpy(imu.astype(float))  # activity label of the sensor segment

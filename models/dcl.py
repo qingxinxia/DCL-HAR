@@ -48,7 +48,7 @@ class HARModel(nn.Module):
         x = self.dropout(x)
         x = self.fc(x)
 
-        out = x.view(batch_size, -1, self.n_classes)[:, -1, :]
+        out = x.view(batch_size, -1, self.n_classes)[:, -1, :]  # out shape=(batch, num_classes)
 
         return out, hidden
 
