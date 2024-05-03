@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 
 from src.utils import prepare_data_openpack
-from models.dcl import HARModel, DeepConvLSTM
+from models.dcl import HARModel, DeepConvLSTM, DeepConvLstmV1, DeepConvLstmV3
 from src.train_utils import train_time_series_seg, eval_time_series_seg, test
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
@@ -63,9 +63,10 @@ def main():
     #                  n_filters=64, n_classes=NB_CLASSES, filter_size=5,
     #                  datalen=args.datalen, drop_prob=0.5, device=device)
 
-    model = DeepConvLSTM(n_channels=args.in_feature, n_classes=NB_CLASSES,
-                         conv_kernels=64, kernel_size=5,
-                         LSTM_units=128, backbone=False)
+    # model = DeepConvLSTM(n_channels=args.in_feature, n_classes=NB_CLASSES,
+    #                      conv_kernels=64, kernel_size=5,
+    #                      LSTM_units=128, backbone=False)
+    model = DeepConvLstmV1(in_ch=args.in_feature, num_classes=NB_CLASSES)
     model = model.to(device)
     optimizer = torch.optim.SGD(model.parameters(),
                                 lr=args.lr,

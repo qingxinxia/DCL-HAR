@@ -19,21 +19,23 @@ def train_time_series_seg(net, opt, criterion, train_loader,
     train_losses = []
     net.train()
     for i, (imus, labels) in enumerate(tqdm(train_loader)):
-        inputs = imus.to(device=device, non_blocking=True, dtype=torch.float)
+        imus = imus.to(device=device, non_blocking=True, dtype=torch.float)
         targets = labels.to(device=device, non_blocking=True, dtype=torch.int)
 
         # Creating new variables for the hidden state, otherwise
         # we'd backprop through the entire training history
         # h = tuple([each.data for each in h])
 
-        # zero accumulated gradients
-        opt.zero_grad()
-
         # get the output from the model
         # output, h = net(inputs, h, batch_size)
-        output, _ = net(inputs)
+        # reshape input
+        inputs = torch.transpose(imus.unsqueeze(3),2,1)
+        output = net(inputs)
 
-        loss = criterion(output, targets[:,0,:].reshape(-1).long())
+        loss = criterion(output.reshape(-1, output.shape[-1]),
+                         targets.reshape(-1).long())
+        # zero accumulated gradients
+        opt.zero_grad()
         train_losses.append(loss.item())
         loss.backward()
         opt.step()
@@ -102,31 +104,40 @@ def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plt
         for idx, (sample, target) in enumerate(test_loader):
             n_batches += 1
             sample, target = sample.to(DEVICE).float(), target.to(DEVICE).long()
-            target = target[:, 0, 0]
 
-            out, features = model(sample)
-            loss = criterion(out, target)
+            # reshape input
+            sample = torch.transpose(sample.unsqueeze(3),2,1)
+            out = model(sample)
+            # reshape output
+            target = target.reshape(-1).long()
+            output = out.reshape(-1, out.shape[-1])
+            loss = criterion(output,
+                         target)
             # loss = criterion(out, target[:, 0, :].reshape(-1).long())
             total_loss += loss.item()
-            _, predicted = torch.max(out.data, 1)
+            _, predicted = torch.max(output.data, 1)
             total += target.size(0)
             correct += (predicted == target).sum()
             if prds is None:
                 prds = predicted
                 trgs = target
-                feats = features[:, :]
+                # feats = features[:, :]
             else:
                 prds = torch.cat((prds, predicted))
                 trgs = torch.cat((trgs, target))
-                feats = torch.cat((feats, features), 0)
+                # feats = torch.cat((feats, features), 0)
 
             # save data
             if savef == True:
                 tmp_imu = sample.detach().cpu().numpy()
                 GTimu_list.append(tmp_imu)
+
                 tmp_label = target.detach().cpu().numpy()
+                tmp_label = tmp_label.reshape(sample.shape[0], -1, tmp_label.shape[-1])
                 GTlabel_list.append(tmp_label)
+
                 tmp_label = predicted.detach().cpu().numpy()
+                tmp_label = tmp_label.reshape(sample.shape[0], -1, tmp_label.shape[-1])
                 predlabel_list.append(tmp_label)
             # predlabel_list.append(np.tile(tmp_label, (1, target.shape[1])))
 
@@ -142,7 +153,7 @@ def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plt
     print(confusion_matrix.diag() / confusion_matrix.sum(1))
     # print(confusion_matrix, name='conf_mat')
     if plt == True:
-        tsne(feats.detach().cpu().numpy(), trgs.detach().cpu().numpy(), save_dir=os.path.join(folder_path, 'tsne_epoch_%s.png'%str(epoch)))
+        # tsne(feats.detach().cpu().numpy(), trgs.detach().cpu().numpy(), save_dir=os.path.join(folder_path, 'tsne_epoch_%s.png'%str(epoch)))
         # mds(feats.detach().cpu().numpy(), trgs.detach().cpu().numpy(), save_dir=os.path.join(folder_path, 'mds_epoch_%s.png'%str(epoch)))
         sns_plot = sns.heatmap(confusion_matrix, cmap='Blues', annot=True)
         sns_plot.get_figure().savefig(os.path.join(folder_path, 'confmatrix_epoch_%s.png'%str(epoch)))
