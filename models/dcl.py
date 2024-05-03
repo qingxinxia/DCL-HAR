@@ -71,3 +71,45 @@ class HARModel(nn.Module):
 
 # net = HARModel()
 
+class DeepConvLSTM(nn.Module):
+    def __init__(self, n_channels, n_classes, conv_kernels=64, kernel_size=5, LSTM_units=128, backbone=True):
+        super(DeepConvLSTM, self).__init__()
+
+        self.backbone = backbone
+
+        self.conv1 = nn.Conv2d(1, conv_kernels, (kernel_size, 1))
+        self.conv2 = nn.Conv2d(conv_kernels, conv_kernels, (kernel_size, 1))
+        self.conv3 = nn.Conv2d(conv_kernels, conv_kernels, (kernel_size, 1))
+        self.conv4 = nn.Conv2d(conv_kernels, conv_kernels, (kernel_size, 1))
+
+        self.dropout = nn.Dropout(0.5)
+        self.lstm = nn.LSTM(n_channels * conv_kernels, LSTM_units, num_layers=2)
+
+        self.out_dim = LSTM_units
+
+        if backbone == False:
+            self.classifier = nn.Linear(LSTM_units, n_classes)
+
+        self.activation = nn.ReLU()
+
+    def forward(self, x):  # (batch, datalen, datadim)
+        self.lstm.flatten_parameters()
+        x = x.unsqueeze(1)  # out_x.shape=(batch, 1, datalen, datadim)
+        x = self.activation(self.conv1(x))  # out_x.shape=(batch, 64, datalen52, datadim)
+        x = self.activation(self.conv2(x))
+        x = self.activation(self.conv3(x))  # out_x.shape=(batch, 64, datalen48, datadim)
+        x = self.activation(self.conv4(x))  # out_x.shape=(batch, 64, datalen44, datadim)
+
+        x = x.permute(2, 0, 3, 1)
+        x = x.reshape(x.shape[0], x.shape[1], -1)  # out_x.shape=(datalen44, batch, -1)
+
+        x = self.dropout(x)
+
+        x, h = self.lstm(x)  # out_x.shape=(datalen44, batch, 128)
+        x = x[-1, :, :]
+
+        if self.backbone:
+            return None, x
+        else:
+            out = self.classifier(x)  # out.shape=(512, cls), x.shape=(512, 128)
+            return out, x

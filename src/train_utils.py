@@ -1,9 +1,12 @@
 
+import os
 import torch
 import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
 import sklearn.metrics as metrics
+import seaborn as sns
+from src.utils import mds, tsne
 
 def train_time_series_seg(net, opt, criterion, train_loader,
                           device='cuda:0', batch_size=100):
@@ -12,7 +15,7 @@ def train_time_series_seg(net, opt, criterion, train_loader,
     # losses = []
 
     # initialize hidden state
-    h = net.init_hidden(batch_size)
+    # h = net.init_hidden(batch_size)
     train_losses = []
     net.train()
     for i, (imus, labels) in enumerate(tqdm(train_loader)):
@@ -21,13 +24,14 @@ def train_time_series_seg(net, opt, criterion, train_loader,
 
         # Creating new variables for the hidden state, otherwise
         # we'd backprop through the entire training history
-        h = tuple([each.data for each in h])
+        # h = tuple([each.data for each in h])
 
         # zero accumulated gradients
         opt.zero_grad()
 
         # get the output from the model
-        output, h = net(inputs, h, batch_size)
+        # output, h = net(inputs, h, batch_size)
+        output, _ = net(inputs)
 
         loss = criterion(output, targets[:,0,:].reshape(-1).long())
         train_losses.append(loss.item())
@@ -43,7 +47,7 @@ def train_time_series_seg(net, opt, criterion, train_loader,
 
 
 def eval_time_series_seg(net, criterion, test_loader, device='cuda:0', batch_size=100):
-    val_h = net.init_hidden(batch_size)
+    # val_h = net.init_hidden(batch_size)
     val_losses = []
     accuracy = 0
     f1score = 0
@@ -54,9 +58,10 @@ def eval_time_series_seg(net, criterion, test_loader, device='cuda:0', batch_siz
             inputs = imus.to(device=device, non_blocking=True, dtype=torch.float)
             targets = labels.to(device=device, non_blocking=True, dtype=torch.int)
 
-            val_h = tuple([each.data for each in val_h])
+            # val_h = tuple([each.data for each in val_h])
 
-            output, val_h = net(inputs, val_h, batch_size)
+            # output, val_h = net(inputs, val_h, batch_size)
+            output, _ = net(inputs)
 
             val_loss = criterion(output, targets[:,0,:].reshape(-1).long())
             val_losses.append(val_loss.item())
@@ -75,8 +80,74 @@ def eval_time_series_seg(net, criterion, test_loader, device='cuda:0', batch_siz
             tmp_label = top_class.detach().cpu().numpy()
             predlabel_list.append(np.tile(tmp_label, (1, labels.shape[1])))
 
-    # print("Val Loss: {:.4f}...".format(np.mean(val_losses)),
-    #       "Val Acc: {:.4f}...".format(accuracy / (len(X_test) // batch_size)),
-    #       "F1-Score: {:.4f}...".format(f1score / (len(X_test) // batch_size)))
+    datalength = test_loader.batch_sampler.sampler.data_source.label.data.shape[0]
+    print("Val Loss: {:.4f}...".format(np.mean(val_losses)),
+          "Val Acc: {:.4f}...".format(accuracy / (datalength // batch_size)),
+          "F1-Score: {:.4f}...".format(f1score / (datalength // batch_size)))
 
     return GTimu_list, GTlabel_list, predlabel_list
+
+def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plt=False, savef=True):
+    with torch.no_grad():
+        model.eval()
+        total_loss = 0
+        n_batches = 0
+        total = 0
+        correct = 0
+        feats = None
+        prds = None
+        trgs = None
+        confusion_matrix = torch.zeros(n_class, n_class)
+        GTlabel_list, predlabel_list, GTimu_list = [], [], []
+        for idx, (sample, target) in enumerate(test_loader):
+            n_batches += 1
+            sample, target = sample.to(DEVICE).float(), target.to(DEVICE).long()
+            target = target[:, 0, 0]
+
+            out, features = model(sample)
+            loss = criterion(out, target)
+            # loss = criterion(out, target[:, 0, :].reshape(-1).long())
+            total_loss += loss.item()
+            _, predicted = torch.max(out.data, 1)
+            total += target.size(0)
+            correct += (predicted == target).sum()
+            if prds is None:
+                prds = predicted
+                trgs = target
+                feats = features[:, :]
+            else:
+                prds = torch.cat((prds, predicted))
+                trgs = torch.cat((trgs, target))
+                feats = torch.cat((feats, features), 0)
+
+            # save data
+            if savef == True:
+                tmp_imu = sample.detach().cpu().numpy()
+                GTimu_list.append(tmp_imu)
+                tmp_label = target.detach().cpu().numpy()
+                GTlabel_list.append(tmp_label)
+                tmp_label = predicted.detach().cpu().numpy()
+                predlabel_list.append(tmp_label)
+            # predlabel_list.append(np.tile(tmp_label, (1, target.shape[1])))
+
+        acc_test = float(correct) * 100.0 / total
+
+    print({"dev": {"Test Loss": total_loss / n_batches}})
+    print({"dev": {"Test Acc": acc_test}})
+
+    print(f'Test Loss     : {total_loss / n_batches:.4f}\t | \tTest Accuracy     : {acc_test:2.4f}\n')
+    for t, p in zip(trgs.view(-1), prds.view(-1)):
+        confusion_matrix[t.long(), p.long()] += 1
+    print(confusion_matrix)
+    print(confusion_matrix.diag() / confusion_matrix.sum(1))
+    # print(confusion_matrix, name='conf_mat')
+    if plt == True:
+        tsne(feats.detach().cpu().numpy(), trgs.detach().cpu().numpy(), save_dir=os.path.join(folder_path, 'tsne_epoch_%s.png'%str(epoch)))
+        # mds(feats.detach().cpu().numpy(), trgs.detach().cpu().numpy(), save_dir=os.path.join(folder_path, 'mds_epoch_%s.png'%str(epoch)))
+        sns_plot = sns.heatmap(confusion_matrix, cmap='Blues', annot=True)
+        sns_plot.get_figure().savefig(os.path.join(folder_path, 'confmatrix_epoch_%s.png'%str(epoch)))
+
+    if savef == True:
+        return GTimu_list, GTlabel_list, predlabel_list
+    else:
+        return
