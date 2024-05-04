@@ -23,7 +23,7 @@ parser.add_argument('--batch_size', default=1024, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--in_feature', default=12, type=int,
                     help='number of values (dimensions) of input (12=arms.dim+hands.dim). ')
@@ -80,12 +80,13 @@ def main():
     for epoch in range(start_epoch, args.epochs):
         print('Epoch %d/%d' % (epoch, args.epochs))
 
-        loss_value = train_time_series_seg(model, optimizer, criterion,
+        loss_value, accuracy = train_time_series_seg(model, optimizer, criterion,
                                            train_dataloader, device,
                                            args.batch_size)
         loss_list.append(loss_value)
         print("Epoch: {}/{}...".format(epoch + 1, args.epochs),
-              "Train Loss: {:.4f}...".format(loss_value))
+              "Train Loss: {:.4f}...".format(loss_value),
+              "Train Acc: {:.2f}...".format(accuracy))
 
         if epoch % 100 == 0:
             test(test_dataloader, model, device, criterion,

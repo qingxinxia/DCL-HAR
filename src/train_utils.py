@@ -11,24 +11,14 @@ import matplotlib.pyplot as plt
 
 def train_time_series_seg(net, opt, criterion, train_loader,
                           device='cuda:0', batch_size=100):
-    # opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
-    # criterion = nn.CrossEntropyLoss()
-    # losses = []
 
-    # initialize hidden state
-    # h = net.init_hidden(batch_size)
     train_losses = []
     net.train()
+    total, correct = 0, 0
     for i, (imus, labels) in enumerate(tqdm(train_loader)):
         imus = imus.to(device=device, non_blocking=True, dtype=torch.float)
         targets = labels.to(device=device, non_blocking=True, dtype=torch.int)
 
-        # Creating new variables for the hidden state, otherwise
-        # we'd backprop through the entire training history
-        # h = tuple([each.data for each in h])
-
-        # get the output from the model
-        # output, h = net(inputs, h, batch_size)
         # reshape input
         inputs = torch.transpose(imus.unsqueeze(3), 2, 1)
         output = net(inputs)
@@ -41,12 +31,20 @@ def train_time_series_seg(net, opt, criterion, train_loader,
         loss.backward()
         opt.step()
 
+        # calculate accuracy
+        target = targets.reshape(-1).long()
+        output = output.reshape(-1, output.shape[-1])
+        _, predicted = torch.max(output.data, 1)
+        total += target.size(0)
+        correct += (predicted == target).sum()
+    acc_test = float(correct) * 100.0 / total
+
     # print("Epoch: {}/{}...".format(e + 1, epochs),
     #       "Train Loss: {:.4f}...".format(np.mean(train_losses)))
     # "Val Loss: {:.4f}...".format(np.mean(val_losses)),
     # "Val Acc: {:.4f}...".format(accuracy / (len(X_test) // batch_size)),
     # "F1-Score: {:.4f}...".format(f1score / (len(X_test) // batch_size)))
-    return np.mean(train_losses)
+    return np.mean(train_losses), acc_test
 
 
 def eval_time_series_seg(net, criterion, test_loader, device='cuda:0', batch_size=100):
@@ -119,6 +117,7 @@ def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plt
             _, predicted = torch.max(output.data, 1)
             total += target.size(0)
             correct += (predicted == target).sum()
+
             if prds is None:
                 prds = predicted
                 trgs = target
