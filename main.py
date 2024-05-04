@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 
 from src.utils import prepare_data_openpack
-from models.dcl import HARModel, DeepConvLSTM, DeepConvLstmV1, DeepConvLstmV3
+from models.dcl import DeepConvLstmV1, DeepConvLstmV3
 from src.train_utils import train_time_series_seg, eval_time_series_seg, test
 
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
@@ -16,14 +16,14 @@ parser.add_argument('--test_dataset', default='U0201', type=str,
 parser.add_argument('--datalen', default=60, type=int,
                     help='Length of input data(15Hz). ')
 
-parser.add_argument('--epochs', default=1000, type=int, metavar='N',
+parser.add_argument('--epochs', default=300, type=int, metavar='N',
                     help='number of total epochs to run')
-parser.add_argument('--batch_size', default=512, type=int,
+parser.add_argument('--batch_size', default=1024, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--lr', '--learning-rate', default=0.0001, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--in_feature', default=12, type=int,
                     help='number of values (dimensions) of input (12=arms.dim+hands.dim). ')
@@ -32,6 +32,8 @@ parser.add_argument('--num_feature', default=128, type=int,
 parser.add_argument('--weight_decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
+parser.add_argument('--checkpoint', default=False, type=bool,
+                    help='If load checkpoint or not. ')
 # parser.add_argument('--seed', default=None, type=int,
 #                     help='seed for initializing training. ')
 
@@ -59,14 +61,13 @@ def main():
                                                               args.datalen,
                                                               args.test_dataset)
 
-    # model = HARModel(args.in_feature, n_hidden=args.num_feature, n_layers=1,
-    #                  n_filters=64, n_classes=NB_CLASSES, filter_size=5,
-    #                  datalen=args.datalen, drop_prob=0.5, device=device)
+    model = DeepConvLstmV3(in_ch=args.in_feature, num_classes=NB_CLASSES)
 
-    # model = DeepConvLSTM(n_channels=args.in_feature, n_classes=NB_CLASSES,
-    #                      conv_kernels=64, kernel_size=5,
-    #                      LSTM_units=128, backbone=False)
-    model = DeepConvLstmV1(in_ch=args.in_feature, num_classes=NB_CLASSES)
+    # load checkpoint
+    if args.checkpoint:
+        model.load_state_dict(torch.load('DCL_%s_test_%s_epoch_3000.pth' % (args.dataset,
+                                             args.test_dataset)))
+
     model = model.to(device)
     optimizer = torch.optim.SGD(model.parameters(),
                                 lr=args.lr,
@@ -88,21 +89,17 @@ def main():
 
         if epoch % 100 == 0:
             test(test_dataloader, model, device, criterion,
-                 NB_CLASSES, folder_path, epoch, plt=True, savef=False)
+                 NB_CLASSES, folder_path, epoch, plts=True, savef=False)
 
     # Save final model
-
-    torch.save(model.state_dict(), 'DCL_%s_test_%s_epoch_%s.pt' % (args.dataset,
+    torch.save(model.state_dict(), 'DCL_%s_test_%s_epoch_%s.pth' % (args.dataset,
                                              args.test_dataset,
                                              str(args.epochs)))
 
     # check if the latent representation of time series segment is similar when the sensor data is similar
-    # GTimu_list, GTlabel, predlabel \
-    #     = eval_time_series_seg(model, criterion, test_dataloader, device, args.batch_size)
-
     GTimu_list, GTlabel, predlabel \
         = test(test_dataloader, model, device, criterion,
-               NB_CLASSES, folder_path, epoch, plt=True, savef=True)
+               NB_CLASSES, folder_path, epoch, plts=True, savef=True)
 
     GTimus = np.concatenate(GTimu_list, axis=0)
     GTlabels = np.concatenate(GTlabel, axis=0)

@@ -1,4 +1,3 @@
-
 import os
 import torch
 import torch.nn as nn
@@ -7,6 +6,8 @@ import numpy as np
 import sklearn.metrics as metrics
 import seaborn as sns
 from src.utils import mds, tsne
+import matplotlib.pyplot as plt
+
 
 def train_time_series_seg(net, opt, criterion, train_loader,
                           device='cuda:0', batch_size=100):
@@ -29,7 +30,7 @@ def train_time_series_seg(net, opt, criterion, train_loader,
         # get the output from the model
         # output, h = net(inputs, h, batch_size)
         # reshape input
-        inputs = torch.transpose(imus.unsqueeze(3),2,1)
+        inputs = torch.transpose(imus.unsqueeze(3), 2, 1)
         output = net(inputs)
 
         loss = criterion(output.reshape(-1, output.shape[-1]),
@@ -42,9 +43,9 @@ def train_time_series_seg(net, opt, criterion, train_loader,
 
     # print("Epoch: {}/{}...".format(e + 1, epochs),
     #       "Train Loss: {:.4f}...".format(np.mean(train_losses)))
-          # "Val Loss: {:.4f}...".format(np.mean(val_losses)),
-          # "Val Acc: {:.4f}...".format(accuracy / (len(X_test) // batch_size)),
-          # "F1-Score: {:.4f}...".format(f1score / (len(X_test) // batch_size)))
+    # "Val Loss: {:.4f}...".format(np.mean(val_losses)),
+    # "Val Acc: {:.4f}...".format(accuracy / (len(X_test) // batch_size)),
+    # "F1-Score: {:.4f}...".format(f1score / (len(X_test) // batch_size)))
     return np.mean(train_losses)
 
 
@@ -65,14 +66,14 @@ def eval_time_series_seg(net, criterion, test_loader, device='cuda:0', batch_siz
             # output, val_h = net(inputs, val_h, batch_size)
             output, _ = net(inputs)
 
-            val_loss = criterion(output, targets[:,0,:].reshape(-1).long())
+            val_loss = criterion(output, targets[:, 0, :].reshape(-1).long())
             val_losses.append(val_loss.item())
 
             top_p, top_class = output.topk(1, dim=1)
-            equals = top_class == targets[:,0,:].reshape(-1).view(*top_class.shape).long()
+            equals = top_class == targets[:, 0, :].reshape(-1).view(*top_class.shape).long()
             accuracy += torch.mean(equals.type(torch.FloatTensor))
             f1score += metrics.f1_score(top_class.cpu(),
-                                        targets[:,0,:].reshape(-1).view(*top_class.shape).long().cpu(),
+                                        targets[:, 0, :].reshape(-1).view(*top_class.shape).long().cpu(),
                                         average='weighted')
 
             tmp_imu = imus.detach().cpu().numpy()
@@ -89,7 +90,8 @@ def eval_time_series_seg(net, criterion, test_loader, device='cuda:0', batch_siz
 
     return GTimu_list, GTlabel_list, predlabel_list
 
-def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plt=False, savef=True):
+
+def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plts=False, savef=True):
     with torch.no_grad():
         model.eval()
         total_loss = 0
@@ -106,13 +108,12 @@ def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plt
             sample, target = sample.to(DEVICE).float(), target.to(DEVICE).long()
 
             # reshape input
-            sample = torch.transpose(sample.unsqueeze(3),2,1)
+            sample = torch.transpose(sample.unsqueeze(3), 2, 1)
             out = model(sample)
             # reshape output
             target = target.reshape(-1).long()
             output = out.reshape(-1, out.shape[-1])
-            loss = criterion(output,
-                         target)
+            loss = criterion(output, target)
             # loss = criterion(out, target[:, 0, :].reshape(-1).long())
             total_loss += loss.item()
             _, predicted = torch.max(output.data, 1)
@@ -133,11 +134,11 @@ def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plt
                 GTimu_list.append(tmp_imu)
 
                 tmp_label = target.detach().cpu().numpy()
-                tmp_label = tmp_label.reshape(sample.shape[0], -1, tmp_label.shape[-1])
+                tmp_label = tmp_label.reshape(sample.shape[0], -1)
                 GTlabel_list.append(tmp_label)
 
                 tmp_label = predicted.detach().cpu().numpy()
-                tmp_label = tmp_label.reshape(sample.shape[0], -1, tmp_label.shape[-1])
+                tmp_label = tmp_label.reshape(sample.shape[0], -1)
                 predlabel_list.append(tmp_label)
             # predlabel_list.append(np.tile(tmp_label, (1, target.shape[1])))
 
@@ -152,12 +153,13 @@ def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plt
     print(confusion_matrix)
     print(confusion_matrix.diag() / confusion_matrix.sum(1))
     # print(confusion_matrix, name='conf_mat')
-    if plt == True:
+    if plts == True:
+        plt.figure(figsize=(10, 8))
         # tsne(feats.detach().cpu().numpy(), trgs.detach().cpu().numpy(), save_dir=os.path.join(folder_path, 'tsne_epoch_%s.png'%str(epoch)))
         # mds(feats.detach().cpu().numpy(), trgs.detach().cpu().numpy(), save_dir=os.path.join(folder_path, 'mds_epoch_%s.png'%str(epoch)))
         sns_plot = sns.heatmap(confusion_matrix, cmap='Blues', annot=True)
-        sns_plot.get_figure().savefig(os.path.join(folder_path, 'confmatrix_epoch_%s.png'%str(epoch)))
-
+        sns_plot.get_figure().savefig(os.path.join(folder_path, 'confmatrix_epoch_%s.png' % str(epoch)))
+        plt.close()
     if savef == True:
         return GTimu_list, GTlabel_list, predlabel_list
     else:
