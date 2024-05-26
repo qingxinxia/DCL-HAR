@@ -15,9 +15,9 @@ def train_time_series_seg(net, opt, criterion, train_loader,
     train_losses = []
     net.train()
     total, correct = 0, 0
-    for i, (imus, labels) in enumerate(tqdm(train_loader)):
-        imus = imus.to(device=device, non_blocking=True, dtype=torch.float)
-        targets = labels.to(device=device, non_blocking=True, dtype=torch.int)
+    for i, (imus, targets) in enumerate(tqdm(train_loader)):
+        # imus = imus.to(device=device, non_blocking=True, dtype=torch.float)
+        # targets = labels.to(device=device, non_blocking=True, dtype=torch.int)
 
         # reshape input
         inputs = torch.transpose(imus.unsqueeze(3), 2, 1)
@@ -103,7 +103,7 @@ def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plt
         GTlabel_list, predlabel_list, GTimu_list = [], [], []
         for idx, (sample, target) in enumerate(test_loader):
             n_batches += 1
-            sample, target = sample.to(DEVICE).float(), target.to(DEVICE).long()
+            # sample, target = sample.to(DEVICE).float(), target.to(DEVICE).long()
 
             # reshape input
             sample = torch.transpose(sample.unsqueeze(3), 2, 1)
@@ -160,6 +160,6 @@ def test(test_loader, model, DEVICE, criterion, n_class, folder_path, epoch, plt
         sns_plot.get_figure().savefig(os.path.join(folder_path, 'confmatrix_epoch_%s.png' % str(epoch)))
         plt.close()
     if savef == True:
-        return GTimu_list, GTlabel_list, predlabel_list
+        return GTimu_list, GTlabel_list, predlabel_list, acc_test
     else:
         return
